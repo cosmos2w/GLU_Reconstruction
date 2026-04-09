@@ -1,0 +1,78 @@
+% Requires:
+% \usepackage{algorithm}
+% \usepackage{algpseudocode}
+
+\begin{algorithm}[htbp]
+\caption{Stage-0 reconstruction training (release protocol)}
+\label{alg:stage0_train}
+\begin{algorithmic}[1]
+\Require training loader $\mathcal{D}_{\mathrm{train}}$, validation loader $\mathcal{D}_{\mathrm{val}}$, model $\mathcal{M}$, optimizer $\mathcal{O}$
+\State Freeze temporal propagator parameters
+\For{epoch $=1,\dots,E_0$}
+    \For{batch $(\mathbf{G}_d,\mathbf{G}_f,\mathbf{Y},\mathbf{U}) \sim \mathcal{D}_{\mathrm{train}}$}
+        \State Optionally downsample the sparse input set $\mathbf{G}_d$
+        \State Encode sparse observations and decode reconstructed mean field and variance:
+        \[
+            (\hat{\mathbf{u}}, \log \hat{\boldsymbol{\sigma}}^2, \ldots) \leftarrow \mathcal{M}(\mathbf{G}_d,\mathbf{G}_f,\mathbf{Y},\mathbf{U})
+        \]
+        \State Compute channel-weighted reconstruction loss
+        \[
+            \mathcal{L}_{\mathrm{rec}} = \sum_{c=1}^{n_c} w_c\,\mathrm{MSE}(\hat{\mathbf{u}}^{(c)},\mathbf{u}^{(c)})
+        \]
+        \State Optionally compute sensor-value supervision loss $\mathcal{L}_{\mathrm{obs}}$
+        \State If variance prediction is enabled, compute heteroscedastic negative log-likelihood
+        \[
+            \mathcal{L}_{\mathrm{nll}} = \frac{1}{2}\Big\langle \frac{(\hat{\mathbf{u}}-\mathbf{u})^2}{\hat{\boldsymbol{\sigma}}^2+\varepsilon} + \log \hat{\boldsymbol{\sigma}}^2 \Big\rangle
+        \]
+        \State If adaptive importance learning is enabled, form the normalized uncertainty target
+        \[
+            U(\mathbf{x}) = \mathrm{Norm}(\hat{\sigma}^2(\mathbf{x}))
+        \]
+        \State Compute the variational importance loss $\mathcal{L}_{\phi}$ from $U(\mathbf{x})$
+        \State Form the total loss
+        \[
+            \mathcal{L} = \mathcal{L}_{\mathrm{rec}} + \lambda_{\mathrm{obs}}\mathcal{L}_{\mathrm{obs}} + \lambda_{\mathrm{nll}}\mathcal{L}_{\mathrm{nll}} + \lambda_{\phi}\mathcal{L}_{\phi}
+        \]
+        \State Update trainable parameters with AdamW and gradient clipping
+    \EndFor
+    \State Evaluate the validation reconstruction error on $\mathcal{D}_{\mathrm{val}}$
+    \State Update the learning-rate scheduler and save the best checkpoint according to validation MSE
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[htbp]
+\caption{Stage-1 latent forecasting training (release protocol)}
+\label{alg:stage1_train}
+\begin{algorithmic}[1]
+\Require Stage-0 checkpoint, training loader $\mathcal{D}_{\mathrm{train}}$, validation loader $\mathcal{D}_{\mathrm{val}}$, model $\mathcal{M}$, optimizer $\mathcal{O}$
+\State Load Stage-0 weights; reinitialize the temporal propagator
+\State Freeze encoder and reconstructor parameters
+\For{epoch $=1,\dots,E_1$}
+    \State Set teacher-forcing probability $p_{\mathrm{tf}}$ according to a decaying schedule
+    \For{batch $(\mathbf{G}_d,\mathbf{G}_f,\mathbf{Y},\mathbf{U}) \sim \mathcal{D}_{\mathrm{train}}$}
+        \State Provide an observation window of $N_{\mathrm{window}}$ sparse frames
+        \State Roll out the latent dynamics autoregressively:
+        \[
+            (\hat{\mathcal{S}}_{1:T}, \hat{\mathbf{u}}_{1:T}, \log \hat{\boldsymbol{\sigma}}^2_{1:T}) \leftarrow \mathcal{M}(\mathbf{G}_d,\mathbf{G}_f,\mathbf{Y},\mathbf{U}; p_{\mathrm{tf}})
+        \]
+        \State Compute decoded field loss
+        \[
+            \mathcal{L}_{\mathrm{field}} = \sum_{c=1}^{n_c} w_c\,\mathrm{MSE}(\hat{\mathbf{u}}_{1:T}^{(c)},\mathbf{u}_{1:T}^{(c)})
+        \]
+        \State Compute latent trajectory consistency loss beyond the observation window
+        \[
+            \mathcal{L}_{\mathrm{traj}} = \mathrm{MSE}(\hat{\mathcal{S}}_{t>N_{\mathrm{window}}}, \mathcal{S}_{t>N_{\mathrm{window}}})
+        \]
+        \State Optionally update the importance field through $\mathcal{L}_{\phi}$
+        \State Form the total loss
+        \[
+            \mathcal{L} = \mathcal{L}_{\mathrm{field}} + \lambda_{\mathrm{traj}}\mathcal{L}_{\mathrm{traj}} + \lambda_{\phi}\mathcal{L}_{\phi}
+        \]
+        \State Update temporal-dynamics parameters with AdamW and gradient clipping
+    \EndFor
+    \State Evaluate the validation rollout error on $\mathcal{D}_{\mathrm{val}}$
+    \State Update the learning-rate scheduler and save the best checkpoint according to validation MSE
+\EndFor
+\end{algorithmic}
+\end{algorithm}

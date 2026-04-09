@@ -1,0 +1,9 @@
+numpy
+pyyaml
+matplotlib
+torch
+h5py
+einops
+# optional for non-default/legacy paths:
+# torchdiffeq
+# fairscale

@@ -1,0 +1,81 @@
+# Minimal example config for stage-1 latent forecasting training
+Stage: 1
+case_index: 0
+Repeat_id: 0
+seed: 42
+
+device_ids: [0]
+learning_rate: 1.0e-4
+weight_decay: 1.0e-6
+num_epochs: 100000
+warmup_epochs: 20
+grad_clip: 1.0
+monitor_every: 10
+patience_epochs: 100
+
+USE_DSUS: false
+data_h5: Dataset/collinear_flow_Re40/DataCollinearRe40.h5
+train_ratio: 0.85
+batch_size: 32
+num_workers: 4
+N_window          : 1
+num_time_sample   : 1          # N_ts, for encoder to generate latent trajectory
+num_space_sample  : 64         # N_xs, spatial points randomly sampled
+multi_factor: 1
+channel: 0                # Choose between 0, 1,...-1. For channel =-1 the code load all fields
+channel_to_encode: [0]    # Can set for partial observation situation
+process_mode: MeanStdStand    # Choose between MinMaxNorm, MeanStdStand, SymLogQuant and None
+num_samples: 1024             # Resample of cases in one epoch
+Full_Field_DownS: 0.10
+global_restriction     : True         # Determine if we restrict the whole reconstruction area
+sample_restriction     : True         # Determine if we restrict the sampling area
+Sample_Parameters:                    # Regions that we limit sampling, in the range of [-1, 1]
+  x_lo              : -0.6
+  x_hi              : 0.6
+  y_lo              : -0.9
+  y_hi              : 0.5
+
+F_dim: 64
+num_heads: 4
+num_layers: 4
+num_layers_propagator: 2
+num_freqs: 128
+latent_tokens: 64
+pooling: mean
+retain_cls: true
+retain_lat: false
+USE_FINAL_MLP: false
+decoder_type: UD_Trans  # CausalTrans or UD_Trans
+delta_t: 1.0
+
+Use_Adaptive_Selection: true
+CalRecVar: true
+Use_imp_in_dyn: true
+importance_scale: 0.5
+bandwidth_init: 0.05
+top_k: 16
+per_sensor_sigma: false
+Supervise_Sensors: false
+
+teacher_force_start: 0.75
+teacher_force_decay: 1000.0
+teacher_force_min: 0.05
+temporal_uncert_weight: 0.0
+nll_anneal_epochs: 500
+nll_weight: 1.0e-5
+
+bayesian_phi:
+  phi_mlp_hidden_dim: 128
+  prior_alpha: 2.0
+  prior_beta: 5.0
+  mc_samples_elbo: 5
+  vi_entropy_weight: 0.01
+  var_weight: 0.10
+  lambda_kl: 0.01
+  lambda_elbo: 1.0e-4
+  anneal_epochs: 500
+  update_in_stage1: false
+
+save_net_dir: outputs/checkpoints
+stage0_checkpoint_name: GLU_id0_st0_num0
+save_metric: val_mse
